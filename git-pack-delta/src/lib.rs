@@ -10,6 +10,9 @@
 //! See: <https://github.com/git/git/blob/master/diff-delta.c>
 //! and <https://github.com/git/git/blob/master/patch-delta.c>
 
+// TODO: make std optional when Cursor becomes stable in core.
+// #![cfg_attr(not(feature = "std"), no_std)]
+
 #[macro_use]
 extern crate static_assertions_next;
 
