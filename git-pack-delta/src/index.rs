@@ -29,8 +29,6 @@ pub struct DeltaIndex<H: RollingHash> {
     pub(crate) hash_mask: u32,
 }
 
-// TODO: <https://github.com/git/git/commit/29f049a0c277be72637f74f1f90a89dccd3475bc>
-
 pub fn create_delta_index_custom<H: RollingHash>(base: &[u8]) -> Option<DeltaIndex<H>> {
     let base_len = base.len();
     if base_len == 0 {
