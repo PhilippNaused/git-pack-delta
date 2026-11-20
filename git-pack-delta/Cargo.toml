@@ -10,7 +10,7 @@ publish = true
 readme.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-version = "0.0.2"
+version = "0.0.3"
 
 [dependencies]
 cyclic-poly-23 = "0.4"

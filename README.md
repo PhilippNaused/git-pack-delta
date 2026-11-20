@@ -2,6 +2,7 @@
 
 [![Build Status](https://github.com/PhilippNaused/git-pack-delta/actions/workflows/rust.yml/badge.svg)](https://github.com/PhilippNaused/git-pack-delta)
 [![crates.io](https://img.shields.io/crates/v/git-pack-delta.svg)](https://crates.io/crates/git-pack-delta)
+[![Documentation](https://docs.rs/git-pack-delta/badge.svg)](https://docs.rs/git-pack-delta)
 
 This is a pure rust implementation of Git's delta compression algorithm. (Not to be confused with it's diff algorithm!)
 
