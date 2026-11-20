@@ -54,11 +54,10 @@ pub fn write_delta_to<H: RollingHash>(
     writer.emit_len(target_len, false);
 
     let hash_mask = index.hash_mask;
-    let entries = &index.entries;
     let initial_size = cmp::min(H::WINDOW, target_len);
     let initial_data = &target[..initial_size];
     // initialize the rolling hash:
-    let mut hash = H::from_slice(initial_data);
+    let mut hasher = H::from_slice(initial_data);
     let mut insert_count = initial_size; // size of pending insert command
     let mut target_pos = initial_size; // ptr in target
     let mut match_off: u32 = 0; // offset of current match
@@ -71,15 +70,18 @@ pub fn write_delta_to<H: RollingHash>(
         if match_len < GOOD_MATCH_LENGTH {
             // update rolling hash
             H::roll_once(
-                &mut hash,
+                &mut hasher,
                 target[target_pos],
                 target[target_pos - H::WINDOW],
             );
             // find match
-            let idx = H::apply_mask(hash.value(), hash_mask);
-            let bucket = &entries[idx];
-            for entry in bucket.iter() {
-                if entry.hash != hash.value() {
+            let hash = hasher.value();
+            let h_idx = H::apply_mask(hash, hash_mask);
+            let lo = index.fan_out[h_idx] as usize;
+            let hi = index.fan_out[h_idx + 1] as usize;
+            for entry in &index.entries[lo..hi] {
+                debug_assert_eq!(H::apply_mask(entry.hash, hash_mask), h_idx);
+                if entry.hash != hash {
                     continue; // hash mismatch, try next entry
                 }
                 let ref_start = entry.offset;
@@ -146,7 +148,7 @@ pub fn write_delta_to<H: RollingHash>(
                 // re-seed hash
                 debug_assert!(target_pos >= H::WINDOW);
                 let window = &target[target_pos - H::WINDOW..target_pos];
-                hash.reset_with(window);
+                hasher.reset_with(window);
             }
         }
 

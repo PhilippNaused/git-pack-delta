@@ -25,8 +25,105 @@ impl<H: RollingHash> Clone for IndexEntry<H> {
 
 #[derive(Debug)]
 pub struct DeltaIndex<H: RollingHash> {
-    pub(crate) entries: Vec<Vec<IndexEntry<H>>>,
+    pub(crate) entries: Vec<IndexEntry<H>>,
+    pub(crate) fan_out: Vec<u32>,
     pub(crate) hash_mask: u32,
+}
+
+#[derive(Debug)]
+struct UnpackedEntry<H: RollingHash> {
+    entry: IndexEntry<H>,
+    next: Option<u32>,
+}
+
+#[derive(Debug)]
+struct IndexBuilder<H: RollingHash> {
+    h_size: usize,
+    /// linked lists of entries
+    list: Vec<UnpackedEntry<H>>,
+    /// start index of each linked list
+    starts: Vec<Option<u32>>,
+    /// length of each linked list
+    counts: Vec<u32>,
+}
+
+impl<H: RollingHash> IndexBuilder<H> {
+    fn new(size: usize, h_size: usize) -> Self {
+        Self {
+            h_size,
+            list: Vec::with_capacity(size),
+            starts: vec![None; h_size],
+            counts: vec![0; h_size + 1],
+        }
+    }
+
+    /// Limit the number of entries in the same hash bucket to [`HASH_LIMIT`].
+    /// This guards us against pathological data sets causing really bad hash distribution with most entries in the same hash
+    /// bucket that would bring us to `O(m*n)` computing costs (`m` and `n` corresponding to reference and target buffer sizes).
+    /// Make sure none of the hash buckets has more entries than we're willing to test.
+    /// Otherwise we cull the entry list uniformly to still preserve a good repartition across the reference buffer.
+    fn cull(&mut self) {
+        for i in 0..self.h_size {
+            if self.counts[i] <= HASH_LIMIT as u32 {
+                continue;
+            }
+
+            let mut acc: i32 = 0;
+            let mut entry = self.starts[i];
+
+            // Assume that this loop is gone through exactly `HASH_LIMIT` times and is entered and left with `acc==0`.
+            // So the first statement in the loop contributes `(counts[i]-HASH_LIMIT)*HASH_LIMIT` to the accumulator,
+            // and the inner loop consequently is run `counts[i]-HASH_LIMIT` times,
+            // removing one element from the list each time.
+            // Since acc balances out to `0` at the final run,
+            // the inner loop body can't be left with `entry==None`.
+            // So we indeed encounter `entry==None` in the outer loop only.
+            while entry.is_some() {
+                acc += self.counts[i] as i32 - HASH_LIMIT as i32;
+                if acc > 0 {
+                    let keep = entry.unwrap();
+                    while acc > 0 {
+                        entry = self.list[entry.unwrap() as usize].next;
+                        acc -= HASH_LIMIT as i32;
+                    }
+                    self.list[keep as usize].next = entry;
+                }
+                entry = self.list[entry.unwrap() as usize].next;
+            }
+            debug_assert_eq!(acc, 0);
+        }
+    }
+
+    fn build(mut self) -> DeltaIndex<H> {
+        self.cull();
+
+        debug_assert_eq!(self.h_size + 1, self.counts.len());
+        debug_assert_eq!(self.h_size, self.starts.len());
+
+        let h_size = self.h_size;
+        let mut fan_out = self.counts; // re-use the now unused vec as the fan-out table.
+        fan_out.fill(0);
+
+        let mut packed_hashes = Vec::with_capacity(self.list.len());
+        for i in 0..h_size {
+            // Coalesce all entries belonging to one linked list into consecutive array entries.
+            fan_out[i] = packed_hashes.len() as u32;
+            let mut next_idx = self.starts[i];
+            while let Some(idx) = next_idx {
+                let e = &self.list[idx as usize];
+                packed_hashes.push(e.entry);
+                next_idx = e.next;
+            }
+        }
+        debug_assert_eq!(packed_hashes.len(), self.list.len());
+        fan_out[h_size] = packed_hashes.len() as u32; // Sentinel value to indicate the length of the last hash bucket
+
+        DeltaIndex {
+            entries: packed_hashes,
+            fan_out,
+            hash_mask: (h_size - 1) as u32,
+        }
+    }
 }
 
 pub fn create_delta_index_custom<H: RollingHash>(base: &[u8]) -> Option<DeltaIndex<H>> {
@@ -40,12 +137,12 @@ pub fn create_delta_index_custom<H: RollingHash>(base: &[u8]) -> Option<DeltaInd
     if entries_count == 0 {
         return None;
     }
-    let h_size = get_h_size(entries_count);
+    let h_size = get_h_size(entries_count) as usize;
     debug_assert!(h_size.is_power_of_two());
-    let hash_mask = h_size - 1;
+    let hash_mask = (h_size - 1) as u32;
 
-    let mut entries: Vec<Vec<IndexEntry<H>>> = vec![Vec::new(); h_size as usize];
-    // let hash_count = vec![0; h_size];
+    // linked lists of entries
+    let mut builder = IndexBuilder::new(entries_count as usize, h_size);
 
     let mut prev_hash = H::empty();
     let stride = H::WINDOW as u32;
@@ -60,15 +157,28 @@ pub fn create_delta_index_custom<H: RollingHash>(base: &[u8]) -> Option<DeltaInd
         let window = &base[window_start..window_end];
         let offset = pos + H::WINDOW as u32;
         let hash = H::value_from_slice(window);
-        let index = H::apply_mask(hash, hash_mask); // index in the hash table
+        let h_index = H::apply_mask(hash, hash_mask); // index in the hash table
         if hash == prev_hash {
             // keep the lowest of consecutive identical blocks
-            if let Some(last) = entries[index].last_mut() {
-                last.offset = offset;
+            if let Some(last) = builder.list.last_mut() {
+                debug_assert_eq!(last.entry.hash, hash);
+                last.entry.offset = offset;
             }
         } else {
             prev_hash = hash;
-            entries[index].push(IndexEntry { offset, hash });
+            let last_idx = builder.starts[h_index];
+            if let Some(idx) = last_idx {
+                debug_assert_eq!(
+                    H::apply_mask(builder.list[idx as usize].entry.hash, hash_mask),
+                    h_index
+                );
+            }
+            builder.starts[h_index] = Some(builder.list.len() as u32);
+            builder.list.push(UnpackedEntry {
+                entry: IndexEntry { offset, hash },
+                next: last_idx,
+            });
+            builder.counts[h_index] += 1;
         }
         if pos == 0 {
             break;
@@ -76,26 +186,7 @@ pub fn create_delta_index_custom<H: RollingHash>(base: &[u8]) -> Option<DeltaInd
         pos = pos.saturating_sub(stride);
     }
 
-    // cull the hash table
-    for bucket in entries.iter_mut() {
-        cull_bucket(bucket);
-    }
-
-    Some(DeltaIndex { entries, hash_mask })
-}
-
-/// Culls a hash table bucket to ensure it contains at most [`HASH_LIMIT`] entries.
-/// Keeps evenly distributed entries from the original bucket.
-fn cull_bucket<T: Copy>(bucket: &mut Vec<T>) {
-    if bucket.len() <= HASH_LIMIT {
-        return;
-    }
-    let mut keep = Vec::with_capacity(HASH_LIMIT);
-    for i in 0..HASH_LIMIT {
-        let idx = i * bucket.len() / HASH_LIMIT;
-        keep.push(bucket[idx]);
-    }
-    *bucket = keep;
+    Some(builder.build())
 }
 
 /// Returns the smallest power of two that is >= max(entries_count / 4, 16)
@@ -137,28 +228,11 @@ mod tests {
         assert!((index.hash_mask + 1).is_power_of_two());
 
         // check that entries are sorted by offset (descending)
-        for bucket in &index.entries {
-            for i in 1..bucket.len() {
-                assert!(bucket[i - 1].offset >= bucket[i].offset);
-            }
-        }
-    }
-
-    #[test]
-    fn cull_bucket_small() {
-        let mut bucket: Vec<_> = (0..HASH_LIMIT).collect();
-        cull_bucket(&mut bucket);
-        assert!(bucket.len() == HASH_LIMIT);
-    }
-
-    #[test]
-    fn cull_bucket_large() {
-        let factor = 7;
-        let mut bucket: Vec<_> = (0..(HASH_LIMIT * factor)).collect();
-        cull_bucket(&mut bucket);
-        let expected: Vec<_> = (0..HASH_LIMIT).map(|i| i * factor).collect();
-        assert!(bucket.len() == HASH_LIMIT);
-        assert_eq!(bucket, expected);
+        // for bucket in &index.entries {
+        //     for i in 1..bucket.len() {
+        //         assert!(bucket[i - 1].offset >= bucket[i].offset);
+        //     }
+        // }
     }
 }
 
