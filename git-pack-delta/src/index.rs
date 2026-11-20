@@ -82,7 +82,7 @@ impl<H: RollingHash> IndexBuilder<H> {
         }
         self.starts[h_index] = Some(self.list.len() as u32);
         self.list.push(UnpackedEntry {
-            entry: entry,
+            entry,
             next: last_idx,
         });
         self.counts[h_index] += 1;

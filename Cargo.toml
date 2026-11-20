@@ -3,12 +3,14 @@ resolver = "3"
 members = ["apples", "delta-examples", "git-pack-delta"]
 package.authors = ["Philipp Naused <philipp.naused@t-online.de>"]
 package.categories = ["compression", "encoding", "parsing"]
+package.description = "Pure rust implementation of Git's delta compression algorithm. (Not to be confused with it's diff algorithm!)"
 package.edition = "2024"
 package.keywords = ["git", "pack", "delta"]
 package.license = "MIT"
 package.readme = "README.md"
 package.repository = "https://github.com/PhilippNaused/git-pack-delta"
 package.rust-version = "1.99"
+package.version = "0.0.4"
 
 [profile.release]
 debug = false
