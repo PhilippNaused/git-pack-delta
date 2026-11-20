@@ -1,13 +1,15 @@
 [package]
 authors.workspace = true
+categories.workspace = true
 description = "Pure rust implementation of Git's delta compression algorithm. (Not to be confused with it's diff algorithm!)"
 edition.workspace = true
+keywords.workspace = true
 license.workspace = true
 name = "git-pack-delta"
 publish = true
 repository.workspace = true
 rust-version.workspace = true
-version = "0.1.0"
+version = "0.0.1"
 
 [dependencies]
 cyclic-poly-23 = "0.4"

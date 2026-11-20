@@ -15,4 +15,3 @@ rand = "0.10"
 static_assertions_next = "1.1"
 
 [lints]
-workspace = true
