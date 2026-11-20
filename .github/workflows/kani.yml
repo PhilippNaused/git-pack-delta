@@ -1,0 +1,18 @@
+name: Kani
+
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  # RUSTFLAGS: -Dwarnings
+
+jobs:
+  kani:
+    runs-on: ubuntu-latest
+    steps:
+      - name: ⤵️ Checkout Source
+        uses: actions/checkout@v7
+
+      - name: 🦀 Run Kani
+        uses: model-checking/kani-github-action@v1.1

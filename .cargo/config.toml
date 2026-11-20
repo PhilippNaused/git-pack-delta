@@ -1,0 +1,3 @@
+[build]
+# uncomment this for benchmarking:
+# rustflags = ["-C", "target-cpu=native"]

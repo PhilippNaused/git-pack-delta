@@ -1,0 +1,25 @@
+[package]
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+name = "git-pack-delta"     # git-delta was already taken ;(
+publish = true
+repository.workspace = true
+rust-version.workspace = true
+version = "0.1.0"
+
+[dependencies]
+cyclic-poly-23 = "0.4"
+static_assertions_next = "1.1"
+thiserror = "2"
+
+[dev-dependencies]
+rand = "0.10"
+yare = "3"
+
+[lints]
+workspace = true
+
+# uncomment this to work on kani:
+# [target.'cfg(kani_ra)'.dependencies]
+# kani = { git = "https://github.com/model-checking/kani", optional = true }

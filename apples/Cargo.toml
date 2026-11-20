@@ -1,0 +1,18 @@
+[package]
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+name = "apples"
+publish = false
+repository.workspace = true
+rust-version.workspace = true
+version = "0.0.0"
+
+[dependencies]
+apple-dust = { git = "https://github.com/PhilippNaused/AppleDust.git", branch = "main" }
+git-pack-delta = { path = "../git-pack-delta" }
+rand = "0.10"
+static_assertions_next = "1.1"
+
+[lints]
+workspace = true
