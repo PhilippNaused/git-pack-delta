@@ -97,17 +97,12 @@ fn main() {
     track_alloc::reset();
     start = Instant::now();
 
-    for i in 0..(infos.len() - 1) {
+    for i in 0..infos.len() {
         // try to encode older files as deltas against newer ones
         let target = &infos[i];
         let mut best_size = target.data.len() - 1;
-        let min = i.saturating_sub(WINDOW_SIZE);
-        let max = (i + WINDOW_SIZE + 1).min(infos.len());
-        let window = min..max;
+        let window = i + 1..infos.len().min(i + 1 + WINDOW_SIZE);
         for candidate_idx in window {
-            if candidate_idx == i {
-                continue;
-            }
             let candidate = &infos[candidate_idx];
             let Some(index) = &candidate.index else {
                 continue;
@@ -152,13 +147,13 @@ fn main() {
         .collect::<Vec<_>>();
     let max_delta = *delta_stats.iter().max().unwrap();
     println!("largest delta size: {} bytes", max_delta);
-    w_assert_eq(max_delta, 7515);
+    w_assert_eq(max_delta, 14572);
     let min_delta = *delta_stats.iter().min().unwrap();
     println!("smallest delta size: {} bytes", min_delta);
     w_assert_eq(min_delta, 10);
     let avg_delta = delta_stats.iter().sum::<usize>() as f64 / delta_stats.len() as f64;
     println!("average delta size: {:.2} bytes", avg_delta);
-    w_assert_eq(avg_delta, 140.69484536082473);
+    w_assert_eq(avg_delta, 322.6048109965636);
 
     let compressed_size = infos
         .iter()
@@ -175,7 +170,7 @@ fn main() {
         compressed_size / KB,
         (compressed_size as f64 / original_size as f64) * 100.0
     );
-    w_assert_eq(compressed_size, 427069);
+    w_assert_eq(compressed_size, 691748);
 
     // now decode them again
 
@@ -200,16 +195,16 @@ fn main() {
 /*
 loaded 1456 files
 total original size: 181600 KiB
-computed all delta indices in 112.8511ms
+computed all delta indices in 113.8679ms
 allocated 261.89 MiB
 successfully created delta indices for 1456 (100.00%)
-computed deltas in 529.4659ms
-allocated 199.91 KiB
+computed deltas in 194.2374ms
+allocated 510.16 KiB
 found deltas for 1455 (99.93%)
-largest delta size: 7515 bytes
+largest delta size: 14572 bytes
 smallest delta size: 10 bytes
-average delta size: 140.69 bytes
-total size after delta compression: 417 KiB (0.230%)
-decoded deltas in 15.2978ms
+average delta size: 322.60 bytes
+total size after delta compression: 675 KiB (0.372%)
+decoded deltas in 16.1991ms
 allocated 177.13 MiB
 */
