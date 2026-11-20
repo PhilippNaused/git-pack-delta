@@ -35,7 +35,6 @@ pub fn get_delta_len<H: RollingHash>(
     Some(writer.0)
 }
 
-#[expect(clippy::too_many_lines)]
 pub fn write_delta_to<H: RollingHash>(
     base: &[u8],
     index: &DeltaIndex<H>,
@@ -53,7 +52,6 @@ pub fn write_delta_to<H: RollingHash>(
     writer.emit_len(base_len, true);
     writer.emit_len(target_len, false);
 
-    let hash_mask = index.hash_mask;
     let initial_size = cmp::min(H::WINDOW, target_len);
     let initial_data = &target[..initial_size];
     // initialize the rolling hash:
@@ -75,16 +73,7 @@ pub fn write_delta_to<H: RollingHash>(
                 target[target_pos - H::WINDOW],
             );
             // find match
-            let hash = hasher.value();
-            let h_idx = H::apply_mask(hash, hash_mask);
-            let lo = index.fan_out[h_idx] as usize;
-            let hi = index.fan_out[h_idx + 1] as usize;
-            for entry in &index.entries[lo..hi] {
-                debug_assert_eq!(H::apply_mask(entry.hash, hash_mask), h_idx);
-                if entry.hash != hash {
-                    continue; // hash mismatch, try next entry
-                }
-                let ref_start = entry.offset;
+            for ref_start in index.iter_offsets(hasher.value()) {
                 let new_len =
                     match_bytes::count_matches(&base[ref_start as usize..], &target[target_pos..])
                         as u32;

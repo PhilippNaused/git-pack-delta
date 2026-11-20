@@ -25,9 +25,23 @@ impl<H: RollingHash> Clone for IndexEntry<H> {
 
 #[derive(Debug)]
 pub struct DeltaIndex<H: RollingHash> {
-    pub(crate) entries: Vec<IndexEntry<H>>,
-    pub(crate) fan_out: Vec<u32>,
-    pub(crate) hash_mask: u32,
+    entries: Vec<IndexEntry<H>>,
+    fan_out: Vec<u32>,
+    hash_mask: u32,
+}
+
+impl<H: RollingHash> DeltaIndex<H> {
+    /// Iterates over all offsets in the index that matches a given hash value.
+    pub(crate) fn iter_offsets(&self, hash: H::H) -> impl Iterator<Item = u32> {
+        let h_idx = H::apply_mask(hash, self.hash_mask);
+        let lo = self.fan_out[h_idx] as usize;
+        let hi = self.fan_out[h_idx + 1] as usize;
+        debug_assert!(lo <= hi);
+        self.entries[lo..hi]
+            .iter()
+            .filter(move |i| i.hash == hash)
+            .map(|i| i.offset)
+    }
 }
 
 #[derive(Debug)]
@@ -47,6 +61,7 @@ struct IndexBuilder<H: RollingHash> {
     counts: Vec<u32>,
 }
 
+// TODO: add unit tests for these!
 impl<H: RollingHash> IndexBuilder<H> {
     fn new(size: usize, h_size: usize) -> Self {
         Self {
@@ -55,6 +70,22 @@ impl<H: RollingHash> IndexBuilder<H> {
             starts: vec![None; h_size],
             counts: vec![0; h_size + 1],
         }
+    }
+
+    fn push(&mut self, h_index: usize, entry: IndexEntry<H>) {
+        let last_idx = self.starts[h_index];
+        if let Some(idx) = last_idx {
+            debug_assert_eq!(
+                H::apply_mask(self.list[idx as usize].entry.hash, (self.h_size - 1) as u32),
+                h_index
+            );
+        }
+        self.starts[h_index] = Some(self.list.len() as u32);
+        self.list.push(UnpackedEntry {
+            entry: entry,
+            next: last_idx,
+        });
+        self.counts[h_index] += 1;
     }
 
     /// Limit the number of entries in the same hash bucket to [`HASH_LIMIT`].
@@ -148,7 +179,6 @@ pub fn create_delta_index_custom<H: RollingHash>(base: &[u8]) -> Option<DeltaInd
     let stride = H::WINDOW as u32;
 
     // iterate backward over the source buffer and fill the hash table with fingerprints
-    // TODO: why backwards???
     let mut pos: u32 = (entries_count - 1) * H::WINDOW as u32;
     loop {
         let window_start = (pos + 1) as usize; // why +1???
@@ -157,7 +187,6 @@ pub fn create_delta_index_custom<H: RollingHash>(base: &[u8]) -> Option<DeltaInd
         let window = &base[window_start..window_end];
         let offset = pos + H::WINDOW as u32;
         let hash = H::value_from_slice(window);
-        let h_index = H::apply_mask(hash, hash_mask); // index in the hash table
         if hash == prev_hash {
             // keep the lowest of consecutive identical blocks
             if let Some(last) = builder.list.last_mut() {
@@ -166,19 +195,8 @@ pub fn create_delta_index_custom<H: RollingHash>(base: &[u8]) -> Option<DeltaInd
             }
         } else {
             prev_hash = hash;
-            let last_idx = builder.starts[h_index];
-            if let Some(idx) = last_idx {
-                debug_assert_eq!(
-                    H::apply_mask(builder.list[idx as usize].entry.hash, hash_mask),
-                    h_index
-                );
-            }
-            builder.starts[h_index] = Some(builder.list.len() as u32);
-            builder.list.push(UnpackedEntry {
-                entry: IndexEntry { offset, hash },
-                next: last_idx,
-            });
-            builder.counts[h_index] += 1;
+            let h_index = H::apply_mask(hash, hash_mask); // index in the hash table
+            builder.push(h_index, IndexEntry { offset, hash });
         }
         if pos == 0 {
             break;
@@ -226,13 +244,15 @@ mod tests {
         let base = SAMPLE_DATA;
         let index = create_delta_index_custom::<H>(base).unwrap();
         assert!((index.hash_mask + 1).is_power_of_two());
+        assert_eq!(index.fan_out.len() - 1, (index.hash_mask + 1) as usize);
 
-        // check that entries are sorted by offset (descending)
-        // for bucket in &index.entries {
-        //     for i in 1..bucket.len() {
-        //         assert!(bucket[i - 1].offset >= bucket[i].offset);
-        //     }
-        // }
+        // check that entries are sorted by offset
+        for h_idx in 0..(index.fan_out.len() - 1) {
+            let lo = index.fan_out[h_idx] as usize;
+            let hi = index.fan_out[h_idx + 1] as usize;
+            let entries = &index.entries[lo..hi];
+            assert!(entries.is_sorted_by_key(|i| i.offset))
+        }
     }
 }
 
