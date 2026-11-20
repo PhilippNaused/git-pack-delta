@@ -1,8 +1,9 @@
 [package]
 authors.workspace = true
+description = "Pure rust implementation of Git's delta compression algorithm. (Not to be confused with it's diff algorithm!)"
 edition.workspace = true
 license.workspace = true
-name = "git-pack-delta"     # git-delta was already taken ;(
+name = "git-pack-delta"
 publish = true
 repository.workspace = true
 rust-version.workspace = true

@@ -1,3 +1,12 @@
+//! Creates a delta encoding that can be used to create `target` from `base`.
+//! ```
+//! let base = "This is a pure rust implementation of Git's delta compression algorithm.";
+//! let target = base.replace("Git", "git");
+//! let delta = git_pack_delta::create_delta(base.as_bytes(), target.as_bytes()).unwrap();
+//! assert_eq!(delta.len(), 9);
+//! let target2 = git_pack_delta::patch_delta(base.as_bytes(), &delta).unwrap();
+//! assert_eq!(target.as_bytes(), target2);
+//! ```
 //! See: <https://github.com/git/git/blob/master/diff-delta.c>
 //! and <https://github.com/git/git/blob/master/patch-delta.c>
 
@@ -49,6 +58,13 @@ pub fn create_delta_index(base: &[u8]) -> Option<DeltaIndex<hash::GitRabin>> {
     create_delta_index_custom::<hash::GitRabin>(base)
 }
 
+/// Creates a delta encoding that can be used to create `target` from `base`.
+/// ```
+/// let base = "This is a pure rust implementation of Git's delta compression algorithm.";
+/// let target = base.replace("Git", "git");
+/// let delta = git_pack_delta::create_delta(base.as_bytes(), target.as_bytes()).unwrap();
+/// assert_eq!(delta.len(), 9);
+/// ```
 pub fn create_delta(base: &[u8], target: &[u8]) -> Option<Vec<u8>> {
     if target.len() < 18 {
         return None;
@@ -58,6 +74,14 @@ pub fn create_delta(base: &[u8], target: &[u8]) -> Option<Vec<u8>> {
     write_delta_to_vec(base, &index, target, usize::MAX)
 }
 
+/// Recreates the target from the `base` and encoded `delta`.
+/// ```
+/// let base = "This is a pure rust implementation of Git's delta compression algorithm.";
+/// let target = base.replace("Git", "git");
+/// let delta = git_pack_delta::create_delta(base.as_bytes(), target.as_bytes()).unwrap();
+/// let target2 = git_pack_delta::patch_delta(base.as_bytes(), &delta).unwrap();
+/// assert_eq!(target.as_bytes(), target2);
+/// ```
 pub fn patch_delta(base: &[u8], delta: &[u8]) -> Result<Vec<u8>, DiffDecodeError> {
     let mut data = vec![];
     decode::decode(base, delta, &mut data)?;
@@ -83,6 +107,16 @@ mod tests {
     #[test]
     fn test_round_trip_cyclic_poly64() {
         test_round_trip::<hash::CyclicPoly64>(130);
+    }
+
+    #[test]
+    fn example1() {
+        let base = "This is a pure rust implementation of Git's delta compression algorithm.";
+        let target = base.replace("Git", "git");
+        let delta = create_delta(base.as_bytes(), target.as_bytes()).unwrap();
+        assert_eq!(delta.len(), 9);
+        let target2 = patch_delta(base.as_bytes(), &delta).unwrap();
+        assert_eq!(target.as_bytes(), target2);
     }
 
     fn test_round_trip<R: RollingHash>(exp: usize) {

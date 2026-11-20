@@ -1,3 +1,5 @@
+//! SIMD accelerated utilities for counting the number of matching bytes from the start of two slices.
+
 #[allow(unused_imports)]
 #[cfg(target_arch = "x86")]
 use core::arch::x86::*;
@@ -8,6 +10,10 @@ use core::arch::x86_64::*;
 // TODO: try returning u32 on all paths
 
 /// Counts the number of matching bytes from the start of two slices.
+/// ```
+/// let i = git_pack_delta::match_bytes::count_matches(b"Hello, World!", b"Hello, world!");
+/// assert_eq!(i, 7);
+/// ```
 #[inline(always)]
 pub fn count_matches(a: &[u8], b: &[u8]) -> usize {
     cfg_select! {
