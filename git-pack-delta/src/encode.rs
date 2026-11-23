@@ -19,9 +19,13 @@ pub trait DeltaWriter {
     fn emit_copy(&mut self, offset: u32, length: u32);
     /// Returns the total length of the emitted delta instructions.
     fn len(&self) -> usize;
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 /// Returns the length of the delta encoding for the given base and target using the specified index.
+///
 /// If the length of the delta would exceed `max_output_len`, returns [`None`] instead.
 /// This is ~10-20% faster than actually writing the delta and requires no memory allocations.
 pub fn get_delta_len<H: RollingHash>(
@@ -35,6 +39,11 @@ pub fn get_delta_len<H: RollingHash>(
     Some(writer.0)
 }
 
+/// Writes delta encoding that can re-create `target` from `base` into a [`DeltaWriter`] (e.g., [`Vec<u8>`]).
+///
+/// Requires a reusable `index` over the `base`.
+/// Returns [`None`] if the output would be larger than `max_output_len`.
+/// Assumes that `writer` is empty.
 pub fn write_delta_to<H: RollingHash>(
     base: &[u8],
     index: &DeltaIndex<H>,

@@ -29,12 +29,18 @@ const COPY_CMD_FLAG: u8 = 0x80;
 const ZERO_COPY_LEN: u32 = 0x10000;
 
 pub use decode::DiffDecodeError;
+pub use encode::DeltaWriter;
 pub use encode::get_delta_len;
 pub use encode::write_delta_to;
 pub use hash::RollingHash;
 pub use index::DeltaIndex;
 pub use index::create_delta_index_custom;
+pub use index::create_delta_index_custom_stride;
 
+/// Writes delta encoding that can re-create `target` from `base` into a [`Vec<u8>`].
+///
+/// Requires a reusable `index` over the `base`.
+/// Returns [`None`] if the output would be larger than `max_output_len`.
 pub fn write_delta_to_vec<H: RollingHash>(
     base: &[u8],
     index: &DeltaIndex<H>,
@@ -59,11 +65,21 @@ pub fn write_delta_to_vec<H: RollingHash>(
     Some(output)
 }
 
+/// Creates a reusable hash index from a base buffer.
+///
+/// ```
+/// let base = "This is a pure rust implementation of Git's delta compression algorithm.";
+/// let index = git_pack_delta::create_delta_index(base.as_bytes()).unwrap(); // can be reused for different targets.
+/// let target = base.replace("Git", "git");
+/// let delta = git_pack_delta::write_delta_to_vec(base.as_bytes(), &index, target.as_bytes(), target.len()).unwrap();
+/// assert_eq!(delta.len(), 9);
+/// ```
 pub fn create_delta_index(base: &[u8]) -> Option<DeltaIndex<DefaultHash>> {
     create_delta_index_custom::<DefaultHash>(base)
 }
 
 /// Creates a delta encoding that can be used to create `target` from `base`.
+///
 /// ```
 /// let base = "This is a pure rust implementation of Git's delta compression algorithm.";
 /// let target = base.replace("Git", "git");
@@ -80,6 +96,10 @@ pub fn create_delta(base: &[u8], target: &[u8]) -> Option<Vec<u8>> {
 }
 
 /// Recreates the target from the `base` and encoded `delta`.
+///
+/// # Errors
+///
+/// Fails if `delta` is invalid, doesn't match `base`, or the target is too large to fit into memory.
 /// ```
 /// let base = "This is a pure rust implementation of Git's delta compression algorithm.";
 /// let target = base.replace("Git", "git");

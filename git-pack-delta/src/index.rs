@@ -168,12 +168,33 @@ impl<H: RollingHash> IndexBuilder<H> {
     }
 }
 
+/// Creates a delta hash index from a base buffer using a specified hash algorithm.
+///
+/// Returns [`None`] if `base` is too small (`base.len()` < [`RollingHash::WINDOW`]).
 pub fn create_delta_index_custom<H: RollingHash>(base: &[u8]) -> Option<DeltaIndex<H>> {
+    create_delta_index_custom_stride(base, 16)
+}
+
+/// Creates a delta hash index from a base buffer using a specified hash algorithm and `stride`.
+///
+/// Smaller values for `stride` improve compression, but use more memory.
+/// [`create_delta_index_custom`] uses a stride of `16`.
+///
+/// Returns [`None`] if `base` is too small (`base.len()` < [`RollingHash::WINDOW`]).
+///
+/// # Panic
+///
+/// If `stride` is `0`
+pub fn create_delta_index_custom_stride<H: RollingHash>(
+    base: &[u8],
+    stride: u32,
+) -> Option<DeltaIndex<H>> {
+    assert!(stride > 0);
     let base_len = base.len();
     if base_len == 0 {
         return None;
     }
-    // Current delta format can't encode offsets into reference buffer with more than 32 bits.
+    // The delta format can't encode offsets into base buffer with more than 32 bits.
     const MAX_SIZE: usize = u32::MAX as usize;
     let entries_count = ((cmp::min(base_len, MAX_SIZE) - 1) / H::WINDOW) as u32;
     if entries_count == 0 {
@@ -186,7 +207,6 @@ pub fn create_delta_index_custom<H: RollingHash>(base: &[u8]) -> Option<DeltaInd
     let mut builder = IndexBuilder::new(entries_count as usize, h_size);
 
     let mut prev_hash = H::empty();
-    let stride = H::WINDOW as u32;
 
     // iterate backward over the source buffer and fill the hash table with fingerprints
     let mut pos: u32 = (entries_count - 1) * H::WINDOW as u32;
@@ -215,7 +235,7 @@ pub fn create_delta_index_custom<H: RollingHash>(base: &[u8]) -> Option<DeltaInd
     Some(builder.build())
 }
 
-/// Returns the smallest power of two that is >= max(entries_count / 4, 16)
+/// Returns the smallest power of two that is `>= max(entries_count / 4, 16)`
 fn get_h_size(entries_count: u32) -> u32 {
     // git uses a for loop for this.
     // this only has one branch.
