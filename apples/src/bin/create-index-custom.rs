@@ -1,10 +1,9 @@
 use apple_dust::*;
+use apples::*;
 use git_pack_delta::hash;
 
 #[global_allocator]
 static ALLOCATOR: AllocTracker<std::alloc::System> = AllocTracker::system();
-
-const SAMPLE_DATA: &[u8] = include_bytes!("../../../git-pack-delta/tests/data/diff-delta.c");
 
 fn main() -> Result<(), std::io::Error> {
     let base = SAMPLE_DATA;

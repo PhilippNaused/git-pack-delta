@@ -1,7 +1,5 @@
 use apple_dust::*;
-
-const SAMPLE_DATA: &[u8] = include_bytes!("../../../git-pack-delta/tests/data/diff-delta.c");
-
+use apples::*;
 use git_pack_delta::match_bytes::*;
 
 fn main() -> Result<(), std::io::Error> {

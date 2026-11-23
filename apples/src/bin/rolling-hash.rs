@@ -1,9 +1,8 @@
 use apple_dust::*;
+use apples::*;
 use git_pack_delta::hash::{self, RollingHash};
 
 fn main() -> Result<(), std::io::Error> {
-    const SAMPLE_DATA: &[u8] = include_bytes!("../../../git-pack-delta/tests/data/diff-delta.c");
-
     let data = &SAMPLE_DATA[..16];
 
     BenchmarkBuilder::default()
