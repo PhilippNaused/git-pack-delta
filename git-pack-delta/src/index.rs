@@ -2,6 +2,7 @@
 
 use crate::hash::RollingHash;
 use core::cmp;
+use core::hint::cold_path;
 
 /// maximum hash entry list for the same hash bucket
 const HASH_LIMIT: usize = 64;
@@ -61,7 +62,6 @@ struct IndexBuilder<H: RollingHash> {
     counts: Vec<u32>,
 }
 
-// TODO: add unit tests for these!
 impl<H: RollingHash> IndexBuilder<H> {
     fn new(size: usize, h_size: usize) -> Self {
         Self {
@@ -72,7 +72,8 @@ impl<H: RollingHash> IndexBuilder<H> {
         }
     }
 
-    fn push(&mut self, h_index: usize, entry: IndexEntry<H>) {
+    fn push(&mut self, hash: H::H, offset: u32) {
+        let h_index = H::apply_mask(hash, (self.h_size - 1) as u32);
         let last_idx = self.starts[h_index];
         if let Some(idx) = last_idx {
             debug_assert_eq!(
@@ -82,7 +83,7 @@ impl<H: RollingHash> IndexBuilder<H> {
         }
         self.starts[h_index] = Some(self.list.len() as u32);
         self.list.push(UnpackedEntry {
-            entry,
+            entry: IndexEntry { offset, hash },
             next: last_idx,
         });
         self.counts[h_index] += 1;
@@ -98,30 +99,36 @@ impl<H: RollingHash> IndexBuilder<H> {
             if self.counts[i] <= HASH_LIMIT as u32 {
                 continue;
             }
+            cold_path();
 
-            let mut acc: i32 = 0;
+            let bucket_count = u64::from(self.counts[i]);
+            let keep_count = HASH_LIMIT as u64;
+            let mut acc = bucket_count - keep_count;
             let mut entry = self.starts[i];
+            let mut last_kept = None;
+            let mut kept_count = 0;
 
-            // Assume that this loop is gone through exactly `HASH_LIMIT` times and is entered and left with `acc==0`.
-            // So the first statement in the loop contributes `(counts[i]-HASH_LIMIT)*HASH_LIMIT` to the accumulator,
-            // and the inner loop consequently is run `counts[i]-HASH_LIMIT` times,
-            // removing one element from the list each time.
-            // Since acc balances out to `0` at the final run,
-            // the inner loop body can't be left with `entry==None`.
-            // So we indeed encounter `entry==None` in the outer loop only.
-            while entry.is_some() {
-                acc += self.counts[i] as i32 - HASH_LIMIT as i32;
-                if acc > 0 {
-                    let keep = entry.unwrap();
-                    while acc > 0 {
-                        entry = self.list[entry.unwrap() as usize].next;
-                        acc -= HASH_LIMIT as i32;
+            while let Some(idx) = entry {
+                let next = self.list[idx as usize].next;
+                acc += keep_count;
+                if acc >= bucket_count {
+                    acc -= bucket_count;
+                    if let Some(last) = last_kept {
+                        self.list[last as usize].next = Some(idx);
+                    } else {
+                        self.starts[i] = Some(idx);
                     }
-                    self.list[keep as usize].next = entry;
+                    last_kept = Some(idx);
+                    kept_count += 1;
                 }
-                entry = self.list[entry.unwrap() as usize].next;
+                entry = next;
             }
-            debug_assert_eq!(acc, 0);
+
+            if let Some(last) = last_kept {
+                self.list[last as usize].next = None;
+            }
+            debug_assert_eq!(kept_count, HASH_LIMIT as u32);
+            self.counts[i] = kept_count;
         }
     }
 
@@ -132,6 +139,10 @@ impl<H: RollingHash> IndexBuilder<H> {
         debug_assert_eq!(self.h_size, self.starts.len());
 
         let h_size = self.h_size;
+        let expected_entries = self.counts[..h_size]
+            .iter()
+            .map(|&count| count as usize)
+            .sum::<usize>();
         let mut fan_out = self.counts; // re-use the now unused vec as the fan-out table.
         fan_out.fill(0);
 
@@ -146,7 +157,7 @@ impl<H: RollingHash> IndexBuilder<H> {
                 next_idx = e.next;
             }
         }
-        debug_assert_eq!(packed_hashes.len(), self.list.len());
+        debug_assert_eq!(packed_hashes.len(), expected_entries);
         fan_out[h_size] = packed_hashes.len() as u32; // Sentinel value to indicate the length of the last hash bucket
 
         DeltaIndex {
@@ -170,7 +181,6 @@ pub fn create_delta_index_custom<H: RollingHash>(base: &[u8]) -> Option<DeltaInd
     }
     let h_size = get_h_size(entries_count) as usize;
     debug_assert!(h_size.is_power_of_two());
-    let hash_mask = (h_size - 1) as u32;
 
     // linked lists of entries
     let mut builder = IndexBuilder::new(entries_count as usize, h_size);
@@ -181,7 +191,7 @@ pub fn create_delta_index_custom<H: RollingHash>(base: &[u8]) -> Option<DeltaInd
     // iterate backward over the source buffer and fill the hash table with fingerprints
     let mut pos: u32 = (entries_count - 1) * H::WINDOW as u32;
     loop {
-        let window_start = (pos + 1) as usize; // why +1???
+        let window_start = (pos + 1) as usize;
         let window_end = window_start + H::WINDOW;
         debug_assert!(window_end <= base_len);
         let window = &base[window_start..window_end];
@@ -189,14 +199,12 @@ pub fn create_delta_index_custom<H: RollingHash>(base: &[u8]) -> Option<DeltaInd
         let hash = H::value_from_slice(window);
         if hash == prev_hash {
             // keep the lowest of consecutive identical blocks
-            if let Some(last) = builder.list.last_mut() {
-                debug_assert_eq!(last.entry.hash, hash);
-                last.entry.offset = offset;
-            }
+            let last = builder.list.last_mut().unwrap();
+            debug_assert_eq!(last.entry.hash, hash);
+            last.entry.offset = offset;
         } else {
             prev_hash = hash;
-            let h_index = H::apply_mask(hash, hash_mask); // index in the hash table
-            builder.push(h_index, IndexEntry { offset, hash });
+            builder.push(hash, offset);
         }
         if pos == 0 {
             break;
@@ -213,7 +221,7 @@ fn get_h_size(entries_count: u32) -> u32 {
     // this only has one branch.
     let m = cmp::max(entries_count / 4, 16);
     if m.is_power_of_two() {
-        core::hint::cold_path();
+        cold_path();
         m
     } else {
         m.isolate_highest_one() << 1
@@ -224,6 +232,68 @@ fn get_h_size(entries_count: u32) -> u32 {
 mod tests {
     use super::*;
     const SAMPLE_DATA: &[u8] = include_bytes!("../tests/data/diff-delta.c");
+
+    #[test]
+    fn index_builder_packs_entries_by_bucket() {
+        let mut builder = IndexBuilder::<crate::hash::CyclicPoly32>::new(4, 4);
+        builder.push(0, 40);
+        builder.push(1, 10);
+        builder.push(5, 20);
+        builder.push(2, 30);
+
+        let index = builder.build();
+
+        assert_eq!(index.fan_out, [0, 1, 3, 4, 4]);
+        assert_eq!(
+            index
+                .entries
+                .iter()
+                .map(|entry| (entry.offset, entry.hash))
+                .collect::<Vec<_>>(),
+            [(40, 0), (20, 5), (10, 1), (30, 2)]
+        );
+    }
+
+    #[test]
+    fn index_builder_culls_overfull_bucket_evenly() {
+        let mut builder = IndexBuilder::<crate::hash::CyclicPoly32>::new(128, 16);
+        for offset in 0..128 {
+            builder.push(1, offset);
+        }
+
+        let index = builder.build();
+
+        let expected = (0..HASH_LIMIT)
+            .map(|i| 127 - (i * 2) as u32)
+            .collect::<Vec<_>>();
+        assert_eq!(index.iter_offsets(1).collect::<Vec<_>>(), expected);
+    }
+
+    #[test]
+    fn index_builder_culls_bucket_one_entry_over_limit() {
+        let mut builder = IndexBuilder::<crate::hash::CyclicPoly32>::new(HASH_LIMIT + 1, 16);
+        for offset in 0..=HASH_LIMIT as u32 {
+            builder.push(1, offset);
+        }
+
+        let index = builder.build();
+
+        assert_eq!(index.iter_offsets(1).count(), HASH_LIMIT);
+    }
+
+    #[test]
+    fn delta_index_iter_offsets_filters_hashes_in_same_bucket() {
+        let mut builder = IndexBuilder::<crate::hash::CyclicPoly32>::new(3, 4);
+        builder.push(1, 10);
+        builder.push(5, 20);
+        builder.push(1, 30);
+
+        let index = builder.build();
+
+        assert_eq!(index.iter_offsets(1).collect::<Vec<_>>(), [30, 10]);
+        assert_eq!(index.iter_offsets(5).collect::<Vec<_>>(), [20]);
+        assert_eq!(index.iter_offsets(9).collect::<Vec<_>>(), []);
+    }
 
     #[test]
     fn new_delta_index_git_rabin() {
