@@ -10,7 +10,7 @@ package.license = "MIT"
 package.readme = "README.md"
 package.repository = "https://github.com/PhilippNaused/git-pack-delta"
 package.rust-version = "1.99"
-package.version = "0.0.4"
+package.version = "0.0.5"
 
 [profile.release]
 debug = false

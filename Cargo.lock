@@ -5,7 +5,7 @@ version = 4
 [[package]]
 name = "apple-dust"
 version = "0.1.0"
-source = "git+https://github.com/PhilippNaused/AppleDust.git?branch=main#6b714e83d87a2855b3253abf4f68b7e7e31aa5a1"
+source = "git+https://github.com/PhilippNaused/AppleDust.git?branch=main#7be9b3c6a27366ecb3cca7b34e378da792e2f61e"
 dependencies = [
  "static_assertions_next",
 ]
@@ -181,7 +181,7 @@ dependencies = [
 
 [[package]]
 name = "git-pack-delta"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "cyclic-poly-23",
  "rand",
