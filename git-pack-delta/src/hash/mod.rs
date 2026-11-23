@@ -24,7 +24,7 @@ mod tests {
     const SAMPLE_DATA: &[u8] = include_bytes!("../../tests/data/diff-delta.c");
 
     #[test]
-    fn verify_rolling_git() {
+    fn verify_rolling_git_rabin() {
         verify_rolling::<GitRabin>();
     }
 

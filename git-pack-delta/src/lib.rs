@@ -23,6 +23,8 @@ mod index;
 pub mod match_bytes;
 pub mod varint;
 
+type DefaultHash = hash::CyclicPoly32;
+
 const COPY_CMD_FLAG: u8 = 0x80;
 const ZERO_COPY_LEN: u32 = 0x10000;
 
@@ -57,8 +59,8 @@ pub fn write_delta_to_vec<H: RollingHash>(
     Some(output)
 }
 
-pub fn create_delta_index(base: &[u8]) -> Option<DeltaIndex<hash::GitRabin>> {
-    create_delta_index_custom::<hash::GitRabin>(base)
+pub fn create_delta_index(base: &[u8]) -> Option<DeltaIndex<DefaultHash>> {
+    create_delta_index_custom::<DefaultHash>(base)
 }
 
 /// Creates a delta encoding that can be used to create `target` from `base`.

@@ -1,4 +1,4 @@
-use git_pack_delta::hash::GitRabin;
+use git_pack_delta::hash::CyclicPoly32;
 use git_pack_delta::{create_delta_index_custom, patch_delta, write_delta_to_vec};
 use std::{env, fs};
 
@@ -10,7 +10,7 @@ fn main() -> std::io::Result<()> {
     let file1 = fs::read(&arg1)?;
     let file2 = fs::read(&arg2)?;
 
-    let index = create_delta_index_custom::<GitRabin>(&file1).unwrap();
+    let index = create_delta_index_custom::<CyclicPoly32>(&file1).unwrap();
 
     let delta = write_delta_to_vec(&file1, &index, &file2, file2.len()).unwrap();
     fs::write(&arg3, &delta)?;

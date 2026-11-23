@@ -27,7 +27,7 @@ fn load_data() -> Vec<Vec<u8>> {
     files
 }
 
-type HashAlgorithm = hash::GitRabin;
+type HashAlgorithm = hash::CyclicPoly32;
 
 struct FileInfo {
     data: Vec<u8>,
@@ -198,16 +198,16 @@ fn main() {
 /*
 loaded 1456 files
 total original size: 181600 KiB
-computed all delta indices in 22.7623ms
+computed all delta indices in 20.2666ms
 allocated 315.05 MiB
 successfully created delta indices for 1456 (100.00%)
-computed deltas in 274.445ms
-allocated 462.33 KiB
+computed deltas in 260.2246ms
+allocated 410.48 KiB
 found deltas for 1455 (99.93%)
 largest delta size: 14498 bytes
 smallest delta size: 10 bytes
 average delta size: 288.89 bytes
 total size after delta compression: 627 KiB (0.346%)
-decoded deltas in 14.4701ms
+decoded deltas in 18.367ms
 allocated 177.13 MiB
 */
