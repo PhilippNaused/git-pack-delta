@@ -101,7 +101,7 @@ fn main() {
     for i in 0..infos.len() {
         // try to encode older files as deltas against newer ones
         let target = &infos[i];
-        let mut best_size = target.data.len() - 1;
+        let mut best_size = target.data.len() / 2; // delta should be at most half the size of the original.
         let window = i + 1..infos.len().min(i + 1 + WINDOW_SIZE);
         for candidate_idx in window {
             let candidate = &infos[candidate_idx];
@@ -126,15 +126,17 @@ fn main() {
         // found the best delta, now encode it.
         let base = &infos[idx];
         let index = base.index.as_ref().unwrap();
-        let delta =
-            git_pack_delta::write_delta_to_vec(&base.data, index, &target.data, best_size).unwrap();
+        let mut delta = Vec::with_capacity(best_size);
+        git_pack_delta::write_delta_to(&base.data, index, &target.data, best_size, &mut delta)
+            .unwrap();
+        assert_eq!(delta.len(), best_size);
         let target = &mut infos[i];
         target.delta = Some(delta);
     }
 
     let duration = start.elapsed();
     println!("computed deltas in {:?}", duration);
-    check_alloc(462);
+    check_alloc(410);
     let count_delta = infos.iter().filter(|info| info.delta.is_some()).count();
     w_assert_eq(count_delta, infos.len() - 1); // only one of the files is expected to fail delta creation.
     w_assert_eq(&infos.last().unwrap().delta, &None); // the last (and newest) file is expected to have no delta.
