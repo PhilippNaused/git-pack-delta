@@ -70,6 +70,7 @@ impl NumWord for u128 {
     }
 }
 
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 impl NumWord for __m128i {
     #[inline]
     #[target_feature(enable = "sse2")]
@@ -96,6 +97,7 @@ impl NumWord for __m128i {
     }
 }
 
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 impl NumWord for __m256i {
     #[inline]
     #[target_feature(enable = "avx2")]
@@ -125,6 +127,7 @@ impl NumWord for __m256i {
     }
 }
 
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 impl NumWord for __m512i {
     #[inline]
     #[target_feature(enable = "avx512bw")]
@@ -158,6 +161,7 @@ pub fn count_matches_u128(a: &[u8], b: &[u8]) -> usize {
 /// # Safety
 /// UB if the CPU does not support SSE2.
 #[allow(unused)]
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "sse2")]
 pub unsafe fn count_matches_sse2(a: &[u8], b: &[u8]) -> usize {
     count_matches_word::<__m128i>(a, b)
@@ -166,6 +170,7 @@ pub unsafe fn count_matches_sse2(a: &[u8], b: &[u8]) -> usize {
 /// # Safety
 /// UB if the CPU does not support AVX2.
 #[allow(unused)]
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "avx2")]
 pub unsafe fn count_matches_avx2(a: &[u8], b: &[u8]) -> usize {
     count_matches_word::<__m256i>(a, b)
@@ -174,6 +179,7 @@ pub unsafe fn count_matches_avx2(a: &[u8], b: &[u8]) -> usize {
 /// # Safety
 /// UB if the CPU does not support AVX512BW.
 #[allow(unused)]
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "avx512bw")]
 pub unsafe fn count_matches_avx512bw(a: &[u8], b: &[u8]) -> usize {
     count_matches_word::<__m512i>(a, b)
