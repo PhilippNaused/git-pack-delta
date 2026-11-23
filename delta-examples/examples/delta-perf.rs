@@ -45,13 +45,14 @@ fn w_assert_eq<T: core::fmt::Debug + PartialEq>(actual: T, expected: T) {
 const KB: usize = 1024;
 const MB: usize = KB * 1024;
 
-fn check_alloc() {
+fn check_alloc(exp: u64) {
     let alloc = track_alloc::get_total_bytes();
     if alloc < MB as u64 {
         println!("allocated {:.2} KiB", alloc as f64 / KB as f64);
     } else {
         println!("allocated {:.2} MiB", alloc as f64 / MB as f64);
     }
+    w_assert_eq(alloc / KB as u64, exp);
 }
 
 #[expect(clippy::too_many_lines)] // ;)
@@ -83,7 +84,7 @@ fn main() {
 
     let duration = start.elapsed();
     println!("computed all delta indices in {:?}", duration);
-    check_alloc();
+    check_alloc(322606);
     let success = infos.iter().filter(|info| info.index.is_some()).count();
     w_assert_eq(success, infos.len()); // all files should have a valid delta index
     let percent = (success as f64 / infos.len() as f64) * 100.0;
@@ -133,7 +134,7 @@ fn main() {
 
     let duration = start.elapsed();
     println!("computed deltas in {:?}", duration);
-    check_alloc();
+    check_alloc(462);
     let count_delta = infos.iter().filter(|info| info.delta.is_some()).count();
     w_assert_eq(count_delta, infos.len() - 1); // only one of the files is expected to fail delta creation.
     w_assert_eq(&infos.last().unwrap().delta, &None); // the last (and newest) file is expected to have no delta.
@@ -187,7 +188,7 @@ fn main() {
 
     let duration = start.elapsed();
     println!("decoded deltas in {:?}", duration);
-    check_alloc();
+    check_alloc(181383);
 }
 
 // The output should be like this:
